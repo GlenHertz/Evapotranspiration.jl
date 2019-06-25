@@ -3,309 +3,181 @@
 
 module Evapotranspiration
 
-export Location, Angle, Degree, Radian,
-       Kelvin, Celcius, Fahrenheit,
-       RH, kPa, mm_day, MJ_m2hr, MJ_m2day, Meter,
-       ave
 
-abstract Angle
-immutable Degree <: Angle
-  value::Float64
-end
-immutable Radian <: Angle
-  value::Float64
-end
-value(a::Angle) = a.value
-Base.convert(::Type{Radian}, x::Degree) = π/180*value(x)
-Base.promote_rule(::Type{Radian}, ::Type{Degree}) = Radian
-Base.full{T<:Angle}(x::T) = x
-Base.isnan{T<:Angle}(x::T) = isnan(x.value)
-Base.isless{T<:Angle}(x::T, y::T) = isless(x,y)
-Base.length{T<:Angle}(x::T) = 1
-Base.zero{T<:Angle}(::Type{T}) = T(0.0)
-Base.eltype{T<:Angle}(x::T) = eltype(value(x))
-Base.getindex{T<:Angle}(x::T, i) = getindex(value(x), i)
-Base.abs{T<:Angle}(x::T) = abs(value(x))
-Base.sin(x::Radian) = sin(value(x))
-Base.sin(x::Degree) = sind(value(x))
-Base.cos(x::Radian) = cos(value(x))
-Base.cos(x::Degree) = cosd(value(x))
-Base.tan(x::Radian) = tan(value(x))
-Base.tan(x::Degree) = tand(value(x))
-for op in (:+, :-)
-  @eval ($op){T<:Angle}(x::T, y::T) = T(($op)(x.value, y.value))
-end
-for op in (:*,)
-  @eval ($op){T<:Radian,N<:Number}(x::N, y::T) = ($op)(x, y.value)
-  @eval ($op){T<:Radian,N<:Number}(x::T, y::N) = ($op)(x.value, y)
-end
+using Unitful
+#using Unitful.DefaultSymbols
+import Unitful: Temperature, Pressure, Length, Time, NoUnits
 
-abstract Temperature
-immutable Celcius <: Temperature
-  value::Float64
-end
-immutable Kelvin <: Temperature
-  value::Float64
-end
-immutable Fahrenheit <: Temperature
-  value::Float64
-end
-value(a::Temperature) = a.value
-Base.convert(::Type{Kelvin},  x::Celcius)    = Kelvin(x.value + 273.15)
-#Base.convert(::Type{Celcius}, x::Fahrenheit) = Celcius((x.value-32)/1.8)
-Base.convert(::Type{Kelvin},  x::Fahrenheit) = Kelvin(1.8x.value - 457.67)
-Kelvin(T::Celcius) = convert(Kelvin, T)
-Kelvin(T::Fahrenheit) = convert(Kelvin, T)
-Base.promote_rule(::Type{Kelvin}, ::Type{Celcius}) = Kelvin
-Base.promote_rule(::Type{Kelvin}, ::Type{Fahrenheit}) = Kelvin
-Base.promote_rule(::Type{Kelvin}, ::Type{Float64}) = Float64
-Base.full{T<:Temperature}(x::T) = x
-Base.isnan{T<:Temperature}(x::T) = isnan(x.value)
-Base.isless{T<:Temperature}(x::T, y::T) = isless(x,y)
-Base.length{T<:Temperature}(x::T) = 1
-Base.zero{T<:Temperature}(::Type{T}) = T(0.0)
-Base.eltype{T<:Temperature}(x::T) = eltype(value(x))
-Base.getindex{T<:Temperature}(x::T, i) = getindex(value(x), i)
-for op in (:+, :-)
-  @eval ($op){T<:Temperature}(x::T, y::T) = T(($op)(x.value, y.value))
-end
-for op in (:*,)
-  @eval ($op){T<:Kelvin}(x::T, y::T) = ($op)(x.value, y.value)
-end
-for op in (:+, :-, :*, :/)
-  @eval ($op){T<:Temperature}(x::Number, y::T) = ($op)(x, y.value)
-  @eval ($op){T<:Temperature}(x::T, y::Number) = ($op)(x.value, y)
-end
+const Temp = Temperature
+const Elevation = Length
+const DoY = ClockHrs = Time
+"λ = latent heat of vaporization, 2.45 [MJ/kg]"
+const λ = 2.54u"MJ/kg"
+"cp = specific heat at constant pressure, 1.013e-3 [MJ/kg/°C]"
+const cp = 1.013e-3u"MJ/kg/°C"
+"e′ = ratio molecular weight of water vapour/dry air = 0.622 [unitless]"
+const e′ = 0.622
+"Solar constant, Gsc, in MJ/(m^2*min)"
+const Gsc = 0.0820u"MJ/m^2/minute"
 
-immutable RH
-  value::Float64
-end
-value(a::RH) = a.value
-for op in (:+, :-)
-  @eval ($op){T<:RH}(x::T, y::T) = T(($op)(x.value, y.value))
-end
-for op in (:+, :-, :*, :/)
-  @eval ($op){T<:RH}(x::Number, y::T) = ($op)(x, y.value)
-  @eval ($op){T<:RH}(x::T, y::Number) = ($op)(x.value, y)
-end
+@derived_dimension LatentHeat dimension(u"MJ/kg")
+@derived_dimension SpecificHeat dimension(u"MJ/kg/°C")
+@derived_dimension HeatFlux dimension(u"W/m^2")
+@derived_dimension Speed dimension(u"m/s")
 
-immutable MJ_m2day  # MJ/(m^2*day)  (Radiation)
-  value::Float64
-end
-value(a::MJ_m2day) = a.value
-for op in (:+, :-)
-  @eval ($op){T<:MJ_m2day}(x::T, y::T) = T(($op)(x.value, y.value))
-end
-for op in (:/,)
-  @eval ($op){T<:MJ_m2day}(x::T, y::T) = ($op)(x.value, y.value)
-end
-for op in (:+, :-, :*, :/)
-  @eval ($op){T<:MJ_m2day}(x::Number, y::T) = ($op)(x, y.value)
-  @eval ($op){T<:MJ_m2day}(x::T, y::Number) = ($op)(x.value, y)
-end
-Base.full{T<:MJ_m2day}(x::T) = x
-Base.isnan{T<:MJ_m2day}(x::T) = isnan(x.value)
-Base.isless{T<:MJ_m2day}(x::T, y::T) = isless(x,y)
-Base.length{T<:MJ_m2day}(x::T) = 1
-Base.zero{T<:MJ_m2day}(::Type{T}) = T(0.0)
-Base.eltype{T<:MJ_m2day}(x::T) = eltype(value(x))
-Base.getindex{T<:MJ_m2day}(x::T, i) = getindex(value(x), i)
+export Location, ave, RH
 
-immutable MJ_m2hr  # MJ/(m^2*hr)  (Radiation)
-  value::Float64
-end
-value(a::MJ_m2hr) = a.value
-for op in (:+, :-)
-  @eval ($op){T<:MJ_m2hr}(x::T, y::T) = T(($op)(x.value, y.value))
-end
-for op in (:/,)
-  @eval ($op){T<:MJ_m2hr}(x::T, y::T) = ($op)(x.value, y.value)
-end
-for op in (:+, :-, :*, :/)
-  @eval ($op){T<:MJ_m2hr}(x::Number, y::T) = ($op)(x, y.value)
-  @eval ($op){T<:MJ_m2hr}(x::T, y::Number) = ($op)(x.value, y)
-end
-Base.full{T<:MJ_m2hr}(x::T) = x
-Base.isnan{T<:MJ_m2hr}(x::T) = isnan(x.value)
-Base.isless{T<:MJ_m2hr}(x::T, y::T) = isless(x,y)
-Base.length{T<:MJ_m2hr}(x::T) = 1
-Base.zero{T<:MJ_m2hr}(::Type{T}) = T(0.0)
-Base.eltype{T<:MJ_m2hr}(x::T) = eltype(value(x))
-Base.getindex{T<:MJ_m2hr}(x::T, i) = getindex(value(x), i)
-
-immutable mm_day  # mm/day (Evapotranspiration)
-  value::Float64
-end
-value(a::mm_day) = a.value
-for op in (:+, :-)
-  @eval ($op){T<:mm_day}(x::T, y::T) = T(($op)(x.value, y.value))
-end
-for op in (:+, :-, :*, :/)
-  @eval ($op){T<:mm_day}(x::Number, y::T) = ($op)(x, y.value)
-  @eval ($op){T<:mm_day}(x::T, y::Number) = ($op)(x.value, y)
-end
-Base.full{T<:mm_day}(x::T) = x
-Base.isnan{T<:mm_day}(x::T) = isnan(x.value)
-Base.isless{T<:mm_day}(x::T, y::T) = isless(x,y)
-Base.length{T<:mm_day}(x::T) = 1
-Base.zero{T<:mm_day}(::Type{T}) = T(0.0)
-Base.eltype{T<:mm_day}(x::T) = eltype(value(x))
-Base.getindex{T<:mm_day}(x::T, i) = getindex(value(x), i)
-
-immutable kPa  # kPa (1000 Pascals)
-  value::Float64
-end
-value(a::kPa) = a.value
-for op in (:+, :-)
-  @eval ($op){T<:kPa}(x::T, y::T) = T(($op)(x.value, y.value))
-end
-for op in (:+, :-, :*, :/)
-  @eval ($op){T<:kPa}(x::Number, y::T) = ($op)(x, y.value)
-  @eval ($op){T<:kPa}(x::T, y::Number) = ($op)(x.value, y)
-end
-Base.full{T<:kPa}(x::T) = x
-Base.isnan{T<:kPa}(x::T) = isnan(x.value)
-Base.isless{T<:kPa}(x::T, y::T) = isless(x,y)
-Base.length{T<:kPa}(x::T) = 1
-Base.zero{T<:kPa}(::Type{T}) = T(0.0)
-Base.eltype{T<:kPa}(x::T) = eltype(value(x))
-Base.getindex{T<:kPa}(x::T, i) = getindex(value(x), i)
-
-immutable Meter
-  value::Float64
-end
-value(a::Meter) = a.value
-for op in (:+, :-)
-  @eval ($op){T<:Meter}(x::T, y::T) = T(($op)(x.value, y.value))
-end
-for op in (:+, :-, :*, :/)
-  @eval ($op){T<:Meter}(x::Number, y::T) = ($op)(x, y.value)
-  @eval ($op){T<:Meter}(x::T, y::Number) = ($op)(x.value, y)
-end
-Base.full{T<:Meter}(x::T) = x
-Base.isnan{T<:Meter}(x::T) = isnan(x.value)
-Base.isless{T<:Meter}(x::T, y::T) = isless(x,y)
-Base.length{T<:Meter}(x::T) = 1
-Base.zero{T<:Meter}(::Type{T}) = T(0.0)
-Base.eltype{T<:Meter}(x::T) = eltype(value(x))
-Base.getindex{T<:Meter}(x::T, i) = getindex(value(x), i)
+import Base: *, /, +, -
 
 
-for op in (:*,)
-  @eval ($op)(x::kPa, y::RH) = kPa(($op)(x.value, y.value))
-  @eval ($op)(x::RH, y::kPa) = kPa(($op)(x.value, y.value))
-end
-
-
-
-immutable Location
-  latitude::Radian  # above (+ve) or below (-ve) the equator
-  Lz::Degree # Lz = longitude of the centre of the local time zone [degrees west of Greenwich]
-  Lm::Degree # Lm = longitude of the measurement site [degrees west of Greenwich]
-  z::Meter   # elevation above sea level
+struct Location
+  latitude::DimensionlessQuantity  # above (+ve) or below (-ve) the equator
+  Lz::DimensionlessQuantity # Lz = longitude of the centre of the local time zone [+ve west of Greenwich]
+  Lm::DimensionlessQuantity # Lm = longitude of the measurement site [degrees west of Greenwich]
+  z::Elevation   # elevation above sea level
   # Angstrom's values:
   as::Float64 # regression constant 
   bs::Float64
   albedo::Float64
-  function Location(lat, Lz, Lm, z=Meter(100), as=0.25, bs=0.5, albedo=0.23)
+  function Location(lat::DimensionlessQuantity, Lz::DimensionlessQuantity, Lm::DimensionlessQuantity, z::Elevation=100m, as=0.25, bs=0.5, albedo=0.23)
      new(lat, Lz, Lm, z, as, bs, albedo)
   end
-end
-function Location(latitude::Degree, Lz::Degree, Lm::Degree, z::Meter=Meter(100), as=0.25, bs=0.5, albedo=0.23) 
-  Location(radians(latitude), Lz, Lm, z, as, bs, albedo)
 end
 latitude(loc::Location) = loc.latitude
 Lz(loc::Location) = loc.Lz
 Lm(loc::Location) = loc.Lm
-Lzm(loc::Location) = value(Lz(loc) - Lm(loc))
+Lzm(loc::Location) = uconvert(u"°", Lz(loc) - Lm(loc))
 elevation(loc::Location) = loc.z
 as(loc::Location) = loc.as
 bs(loc::Location) = loc.bs
 albedo(loc::Location) = loc.albedo
   
 
-using Dates
-
 if false
-if !haskey(ENV, "FORECAST_API_KEY")
-  error("tests expect a FORECAST_API_KEY to be set in your environment variables")
+    if !haskey(ENV, "FORECAST_API_KEY")
+      error("tests expect a FORECAST_API_KEY to be set in your environment variables")
+    end
+    
+    options = Dict("APIKey" => ENV["FORECAST_API_KEY"],
+                   "units" => "ca")
 end
 
-options = {"APIKey" => ENV["FORECAST_API_KEY"],
-           "units" => "ca"}
-end
+# Helper function
+"Extract numeric part from quantity in terms of unit"
+uval(unit, quantity) = float(uconvert(unit, quantity).val)
 
-ave(x::Number, y::Number) = (x+y)/2
-ave{T}(x::T, y::T) = T((x+y)/2)
+"Average Value"
+ave(x::T, y::T) where {T} = T((x+y)/2)
+ave(x::T1, y::T2) where {T1,T2} = ave(promote(x, y)...)
 # Midpoint of hours
-function ave(::Type{Hour}, hr1, hr2)
+function ave_hrs(t1::ClockHrs, t2::ClockHrs)
+    hr1 = uconvert(u"hr", t1)
+    hr2 = uconvert(u"hr", t2)
     if hr2 < hr1  # time wrapped around
-        hr2 += 24
+        hr2 += 24u"hr"
     end
     (hr1 + hr2)/2
 end
 
+
 # Atmospheric pressure (P)
-# P =  atmospheric pressure [kPa],
+# P = atmospheric pressure [kPa],
 # z = elevation above sea level [m],
-# T = temperature [°C]
-P(z::Meter, T::Kelvin) = kPa(101.3((T-0.0065z)/T)^5.26)   # (7)
-P(z::Meter, T::Temperature=Celcius(20)) = P(z, Kelvin(T))
+# T = temperature [K]
+"P = Atmospheric pressure, z = elevation, T = temperature, [kPa]"
+function P(z::Elevation, T::Temp)
+    z = uconvert(u"m", z)
+    T = uconvert(u"K", T)
+    101.3u"kPa" * ((T - 0.0065u"K/m"*z)/T)^5.26   # (7)
+end
 
-
-
-## psychrometric constant, gamma, kPa/C
-# γ  = psychrometric constant [kPa/°C],
+## psychrometric constant, gamma, kPa/°C   # (8)
+# γ′ = psy = psychrometric constant [kPa/°C],
 # p  = atmospheric pressure [kPa],
 # λ  = latent heat of vaporization, 2.45 [MJ/kg],
 # cp = specific heat at constant pressure, 1.013e-3 [MJ/kg/°C],
-# e  = ratio molecular weight of water vapour/dry air = 0.622.
-γ(z::Meter, T::Kelvin, e=0.622, cp=1.013e-3, λ=2.54) = cp*P(z,T)/(e*λ)  # (8)
-γ(p::kPa, e=0.622, cp=1.013e-3, λ=2.54) = cp*p/(e*λ)  # (8)
-γ(z::Meter, T::Temperature=Celcius(20), args...) = γ(z, convert(Kelvin, T), args...)
+# e′  = ratio molecular weight of water vapour/dry air = 0.622.
+"γ′ = psychrometric constant, gamma, [kPa/°C]"
+function γ′(p::Pressure)
+    uconvert(u"kPa/°C", cp*p/(e′*λ))  # (8)
+end
+"γ′ = psychrometric constant, gamma, [kPa/°C]"
+γ′(z::Elevation, t::Temp) = γ′(P(z, t))
 
 ## Relativive humidity, Rh
 # ea = actual vapour pressure [kPa],
-# e° = saturation vapour pressure at temperature T [kPa],
-RH(ea::kPa,T=20) = 100ea/e°(T)   # (10)
+# e° = saturation vapour pressure at temperature t [kPa],
+"Relative humidity [unitless]"
+function RH(ea::Pressure, t::Temp=20°C)
+    ea = uconvert(u"kPa", ea)
+    rh = 100ea/e°(t)   # (10)
+    uconvert(Unitful.NoUnits, rh)
+end
 
 
 ## Saturation vapour pressure, e°, in kPa:
-# e° = saturation vapour pressure at temperature T [kPa],
-# T  = air temperature [°C],
-e°(T::Celcius) = kPa(0.6108*exp(17.27T/(T+237.3)))  # (11)
+# e° = saturation vapour pressure at temperature t [kPa],
+# t  = air temperature [°C],
+"e° = Saturation vapour pressure [kPa]"
+function e°(t::Temp)
+    t = uconvert(u"°C", t)
+    0.6108u"kPa" * exp(17.27t/(t+237.3))      # (11)
+end
 
 ## Mean saturation vapour pressure, Es, in kPa:
 # Julia 0.3 bug: would like to use eₛ (instead of Es) but it doesn't work.
-Es(Tmin::Celcius, Tmax::Celcius) = ave(e°(Tmax), e°(Tmin))   # (12)
+"Mean saturation vapour pressure, Es [kPa]"
+function Es(Tmin::Temp, Tmax::Temp) 
+    p = ave(e°(Tmax), e°(Tmin))   # (12)
+    uconvert(u"kPa", p)
+end
 
-# Slope of saturation vapour pressure curve (Δ) [kPa/C]
-Δ(T::Celcius) = 4098*(0.6108*exp(17.27T/(T+237.3)))/(T+237.3)^2 # (13)
-Δ(Tmin::Celcius, Tmax::Celcius) = Δ(ave(Tmin, Tmax))
+# Slope of saturation vapour pressure curve (Δ) [kPa/°C]
+# T  = mean air temperature [°C]
+"Slope of saturation vapour pressure curve (Δ) [kPa/°C]"
+function Δ(T::Temp) 
+    T = uconvert(u"°C", T)
+    c1 = 4098u"°C"
+    t1 = T+237.3u"°C"
+    c1*(e°(T))/t1^2 # (13)
+end
+Δ(Tmin::Temp, Tmax::Temp) = Δ(ave(Tmin, Tmax))
 
-# Actual vapour pressure (Ea) derived from dewpoint temperature
-Ea(Tdew::Celcius) = e°(Tdew) # (14)
-Ea(Tdew::Temperature) = eᵒ(convert(Celcius, Tdew))
+"Actual vapour pressure (Ea) derived from dewpoint temperature [kPa]"
+Ea(Tdew::Temp) = e°(Tdew) # (14)
 
 # daily mean RH comes from forecast.io
 # This is preferred over Ea(Tdew)
-Ea(Tmin::Celcius, Tmax::Celcius, RHmean::RH) = RHmean*ave(e°(Tmax),e°(Tmin)) # (19)
-Ea(Tmin::Temperature, Tmax::Temperature, RHmean::RH) = Ea(Celcius(Tmin), Celcius(Tmax), RHmean)
+"Actual vapour pressure (Ea) derived from dewpoint temperature [kPa]"
+function Ea(Tmin::Temp, Tmax::Temp, RHmean::Real)
+    RHmean*ave(e°(Tmax),e°(Tmin)) # (19)
+end
 
 # This is preferred over other methods
-Ea(Tmin::Celcius, Tmax::Celcius, RHmin::RH, RHmax::RH) = ave(RHmin*e°(Tmax), RHmax*e°(Tmin)) # (17)
+"Actual vapour pressure (Ea) derived from dewpoint temperature [kPa]"
+function Ea(Tmin::Temp, Tmax::Temp, RHmin::Real, RHmax::Real)
+    ave(e°(Tmin)*RHmax, e°(Tmax)*RHmin) # (17)
+end
 
-## Vapor pressure deficit, Es - Ea, kPa:
-Esa(Tmin::Celcius, Tmax::Celcius; Tdew::Celcius=error("No Tdew")) = Es(Tmin, Tmax) - Ea(Tdew)
-Esa(Tmin::Celcius, Tmax::Celcius, RHmean::RH) = Es(Tmin, Tmax) - Ea(Tmin, Tmax, RHmean)
-Esa(Tmin::Celcius, Tmax::Celcius, RHmin::RH, RHmax::RH) = Es(Tmin, Tmax) - Ea(Tmin, Tmax, RHmin, RHmax)
+"Vapor pressure deficit, Es - Ea [kPa]"
+function Esa(Tmin::Temp, Tmax::Temp; Tdew::Temp=error("No Tdew"))
+    Es(Tmin, Tmax) - Ea(Tdew)
+end
+"Vapor pressure deficit, Es - Ea [kPa]"
+function Esa(Tmin::Temp, Tmax::Temp, RHmean)
+    Es(Tmin, Tmax) - Ea(Tmin, Tmax, RHmean)
+end
+"Vapor pressure deficit, Es - Ea [kPa]"
+function Esa(Tmin::Temp, Tmax::Temp, RHmin, RHmax)
+    Es(Tmin, Tmax) - Ea(Tmin, Tmax, RHmin, RHmax)
+end
 
 ######################
 # Radiation:
 ######################
 
 # Extraterrestial radiation
-
+FIXME:
 MJ2mm(Ra::MJ_m2day) = MJ_m2day(value(Ra)/2.45)  # (20)  # converts MJ to mm (over whatever time period (eg Day or Hour))
 MJ2mm(Ra::MJ_m2hr) = MJ_m2day(value(Ra)/2.45)
 
@@ -315,79 +187,106 @@ MJ2mm(Ra::MJ_m2hr) = MJ_m2day(value(Ra)/2.45)
 # dᵣ  = inverse relative distance Earth-Sun (Equation 23),
 # δ   = solar decimation (Equation 24) [rad].
 # ωs  = sunset hour angle (Equation 25) [rad],
-const Gsc = 0.0820 # Solar constant, Gsc, in MJ/(m^2*min):
-function _Ra(ϕ::Radian, dᵣ, δ::Radian, ωs::Radian)
-  MJ_m2day(24*60/π * Gsc * dᵣ * (ωs*sin(ϕ)*sin(δ) + cos(ϕ)*cos(δ)*sin(ωs)))  # (21)
-end
-# latitude = in [deg]
-function Ra(::Type{Day}, J, loc::Location)  # (21)
-  ϕ = latitude(loc)
-  d = δ(J)
-  _Ra(ϕ, dᵣ(J), d, ωs(ϕ, d))
+"Maximum extraterrestrial radiation for daily periods, Ra [MJ/m^2/day]"
+function Ra(ϕ::DimensionlessQuantity, dᵣ::Real, δ::DimensionlessQuantity, ωs::DimensionlessQuantity)
+  uconvert(u"MJ/m^2/d", (1/π * Gsc * dᵣ * (ωs*sin(ϕ)*sin(δ) + cos(ϕ)*cos(δ)*sin(ωs))))  # (21)
 end
 
-radians(deg::Degree) = Radian(π/180*value(deg))   # (22)
-radians(loc::Location) = radians(latitude(loc))
-# dᵣ inverse relative distance Earth-Sun, dᵣ, unitless
-dᵣ(J::Day) = 1 + 0.033cos(2π/365*Dates.value(J))  # (23)
-# solar decimation, δ
-δ(J::Day) = Radian(0.409*sin(2π/365*Dates.value(J)-1.39))  # (24)
-# sunset hour angle, ws, in radians (zero is solar noon)
-ωs(ϕ::Radian,δ::Radian) = Radian(acos(-tan(ϕ)*tan(δ)))   # (25)
+"Maximum extraterrestrial radiation for daily periods, Ra [MJ/m^2/day]"
+function Ra(J::DoY, loc::Location)  # (21)
+  ϕ = latitude(loc)
+  Ra(ϕ, dᵣ(J), δ(J), ωs(ϕ, d))
+end
+
+"dᵣ inverse relative distance Earth-Sun, dᵣ, unitless"
+dᵣ(J::DoY) = 1 + 0.033cos(2π/365*uval(u"d", J))  # (23)
+function dᵣ(J::DoY)
+    J = uconvert(u"d", J)
+    r = 2π*u"rad" / 365u"d" * J
+    1 + 0.033cos(r)  # (23)
+end
+"solar decimation, δ, [rad]"
+function δ(J::DoY)
+    J = uconvert(u"d", J)
+    α = 2π * J/365u"d"
+    (0.409*sin(α)-1.39)u"rad"  # (24)
+end
+"sunset hour angle, ws, in radians (zero is solar noon) [rad]"
+function ωs(ϕ::DimensionlessQuantity, δ::DimensionlessQuantity)
+    (acos(-tan(ϕ)*tan(δ)))u"rad"   # (25)
+end
 # sun angle at midpoint of period shorter than a day, ws, in radians (zero is solar noon)
 # t = standard clock time at the midpoint of the period [hour]. 
 #   - For example for a period between 14.00 and 15.00 hours, t = 14.5
 # Lz = longitude of the centre of the local time zone [degrees west of Greenwich]
 # Lm = longitude of the measurement site [degrees west of Greenwich]
-ωs(::Type{Hour}, t, J::Day, loc::Location) = π/12*((t+0.06667*Lzm(loc) + Sc(J))-12)  # (31)
-# Sc seasonal correction for solar time [hour]:
-function Sc(J::Day)
-    b = 2π*(Dates.value(J)-81)/364   # (33)
-    0.1645*sin(2b)-0.1255*cos(b)-0.025*sin(b)  # (32)
+"sun angle at midpoint of period shorter than a day, ws, (zero is solar noon) [rad]"
+function ωs(t::ClockHrs, J::DoY, loc::Location) 
+    t = uconvert(u"hr", t)
+    J = uconvert(u"d", J)
+    c1 = 0.06667u"hr"
+    π*u"rad"/12u"hr" * ((t + c1*Lzm(loc) + Sc(J)) - 12u"hr")  # (31)
 end
 
+"Seasonal correction for solar time, Sc [hour]"
+function Sc(J::DoY)
+    J = uconvert(u"d", J)
+    b = 2π*u"rad" * (J - 81u"d")/364u"d"   # (33)
+    (0.1645*sin(2b) - 0.1255*cos(b) - 0.025*sin(b))u"hr"  # (32)
+end
 
+"Max daylight hours"
+function daylighthours(J::DoY, loc::Location)
+    24u"hr"/π*ωs(latitude(loc), δ(J))  # (34)
+end
 
-# Max daylight hours
-daylighthours(J::Day, loc::Location) = 24/π*ωs(latitude(loc), δ(J))  # (34)
-# n = average hours of sun per day
-cloudcover(n, J::Day, loc::Location) = 1-n/daylighthours(J,loc)
+"Cloud cover percent with n = hours of sun in a day, J = day of year [%]"
+function cloudcover(n::ClockHrs, J::DoY, loc::Location)
+    1 - n/daylighthours(J, loc)
+end
 
-function duration(::Type{Hour}, hr1, hr2)
+"Number of hours between two clock hours"
+function hrs_duration(t1::ClockHrs, t2::ClockHrs)
+    hr1 = convert(u"hr", t1)
+    hr2 = convert(u"hr", t1)
     if hr2 < hr1  # time wrapped around
-        hr2 += 24
+        hr2 += 24u"hr"
     end
     hr2 - hr1
 end
-# hr is clock hrs (at midpoint of time period)
-function issunset(T::Type{Hour}, hr, J::Day, loc::Location)
-    wsun = ωs(T, hr, J, loc)  # 0 rad is noon
+
+"Check if clock hours is sunset (at midpoint of time period), J = day of year"
+function issunset(hr::ClockHrs, J::DoY, loc::Location)
+    wsun = ωs(hr, J, loc)  # 0 rad is noon
     ϕ = latitude(loc)
     d = δ(J)
     # sunset hour angle
     wsunset = ωs(ϕ, d)
     abs(wsun) > abs(wsunset)
 end
-# Extraterrestrial radiation for hourly periods, Ra, in MJ/(m^2*hour)
-function Ra(T::Type{Hour}, J::Day, hr1, hr2, loc::Location) # (28)
+
+"Percentage of day for duration of two times"
+function day_pct(t1::ClockHrs, t2::ClockHrs)
+    convert(NoUnits, hrs_duration(t1, t2)/24u"hr")
+end
+
+"Extraterrestrial radiation for hourly periods, Ra [MJ/m^2/hour]"
+function Ra(J::DoY, t1::ClockHrs, t2::ClockHrs, loc::Location) # (28)
     # angle above (below) equator
     ϕ = latitude(loc)
     # solar decimation, d, radians
     d = δ(J)
-    # midpiont of hours, eg if 14h and 15h then t=14.5
-    hr = ave(T, hr1, hr2)
     # sunset hour angle, in radians
-    if issunset(T, hr, J, loc)
+    tmid = ave_hrs(t1, t2)
+    if issunset(tmid, J, loc)
         # sun is below horizon:
-        return ra = MJ_m2hr(0)
+        return 0.0u"MJ/m^2/hr"
     end
     # The solar time angles at the beginning and end of the period are given by:
-    t1 = duration(Hour, hr1, hr2)
-    wsun = ωs(T, hr, J, loc)  # sun angle, 0 rad is noon
-    w1 = wsun - π*t1/24   # (29)
-    w2 = wsun + π*t1/24   # (30)
-    ra = 12*60/π*Gsc*dᵣ(J)*((w2-w1)*sin(ϕ)*sin(d)+cos(ϕ)*cos(d)*(sin(w2)-sin(w1)))  # (28)
-    MJ_m2hr(ra)
+    w1 = ωs(t1, J, loc)  # sun angle, 0 rad is noon
+    w2 = ωs(t2, J, loc)  # sun angle, 0 rad is noon
+    ra = Gsc*dᵣ(J)*12/π*((w2-w1)*sin(ϕ)*sin(d)+cos(ϕ)*cos(d)*(sin(w2)-sin(w1)))  # (28)
+    uconvert(u"MJ/m^2/hr", ra)
 end
     
 ### Solar or Shortwave Radiation, Rs
@@ -400,23 +299,31 @@ end
 # as+bs = fraction of extraterrestrial radiation reaching the earth on clear days (n ≡ N (clear sky)).
 # n = hours of sun per day
 # N = max hours of sun per day
-function Rs{T}(cloud_cover, J::Day, Ra::T, loc::Location)  # (35)
-    N = daylighthours(J, loc)
+"The amount of radiation that penetrates the atmosphere, Rs, units same as Ra"
+function Rs(cloud_cover::Real, J::DoY, Ra::RaT, loc::Location) where {RaT} # (35)
+    #?? N = daylighthours(J, loc)
     sun_pct = (1 - cloud_cover)
     coef = as(loc) + bs(loc)*sun_pct
-    rs = T(coef*Ra)
+    RaT(coef*Ra)
 end
 
 # Clear-sky (n ≡ N) solar radiation, Rso
 # When as and bs are available:
-Rso(Ra,as,bs) = (as+bs)*Ra  # (36)
+"Clear-sky solar radiation (n ≡ N), Rso"
+function Rso(Ra::HeatFlux, as::Real, bs::Real)
+    (as+bs)*Ra  # (36)
+end
+
 # When as and bs are not available:
 # z = station elevation above sea level [m]
-Rso(Ra,z) = (0.75 + 2e-5*z)*Ra  # (37)
+"Clear-sky solar radiation (n ≡ N) at elevation z, Rso"
+function Rso(Ra::HeatFlux, z::Elevation)
+    (0.75 + z/50000u"m")*Ra  # (37)
+end
 
 
-# Rs/Rso: Ratio of solar radiation that reaches the earth (compared to a clear sky day)
-function Rsso(cloud_cover, J::Day, Ra, loc)
+"Rs/Rso: Ratio of solar radiation that reaches the earth (compared to a clear sky day)"
+function Rsso(cloud_cover::Real, J::DoY, Ra::HeatFlux, loc::Location)
     r1 = Rs(cloud_cover, J, Ra, loc)
     r2 = Rs(0,           J, Ra, loc)
     r1/r2
@@ -425,7 +332,10 @@ end
 # Net solar radiation
 # a = albedo or canopy reflection coefficient
 # For example a=0.23 for the hypothetical grass reference crop [dimensionless],
-Rns(Rs, loc::Location) = MJ_m2day((1-albedo(loc))Rs)  # (38)
+"Net short wave solar radiation, which is a balance between the incoming and reflected [MJ/m^2/d]"
+function Rns(Rs::HeatFlux, loc::Location)
+    ((1-albedo(loc))*Rs)  # (38)
+end
 
 # Net long wave radiation, Rnl [MJ/(m^*day)]
 # Rnl = net outgoing longwave radiation [MJ m-2 day-1],
@@ -436,59 +346,65 @@ Rns(Rs, loc::Location) = MJ_m2day((1-albedo(loc))Rs)  # (38)
 # Rs/Rso = relative shortwave radiation, 0 <= Rsso <= 1
 # Rs measured or calculated. (Equation 35) solar radiation [MJ m-2 day-1],
 # Rso calculated (Equation 36 or 37) clear-sky radiation [MJ m-2 day-1].
-function Rnl(Rsso, Tmin::Kelvin, Tmax::Kelvin, Ea::kPa)  # (39)
-    σ = 4.903e-9
-    blackbody = σ * ave(Tmax^4, Tmin^4)
-    air_humidity_correction = 0.34 - 0.14*sqrt(value(Ea))
+"Net outgoing long wave radiation, Rnl [MJ/(m^2*day)]"
+function Rnl(Rsso::Real, Tmin::Temp, Tmax::Temp, Ea::Pressure)  # (39)
+    σ = 4.903e-9u"MJ/K^4/m^2/d"
+    blackbody = σ * ave(u"K"(Tmax)^4, u"K"(Tmin)^4)
+    air_humidity_correction = 0.34 - 0.14u"1/kPa"*Ea
     effect_of_cloudiness = 1.35 * Rsso - 0.351
-    MJ_m2day(blackbody * air_humidity_correction * effect_of_cloudiness)
-end
-function Rnl(Rsso, Tmin::Temperature, Tmax::Temperature, Ea::kPa)
-    Rnl(Rsso, convert(Kelvin, Tmin), convert(Kelvin, Tmax), Ea::kPa)
+    blackbody * air_humidity_correction * effect_of_cloudiness
 end
 
-# Daily radiation, Rn [MJ/(m^*day)]: 
-Rn(Rns, Rnl) = Rns - Rnl   # (40)
+"Daily radiation, Rn [MJ/(m^2*day)]" 
+function Rn(Rns::HeatFlux, Rnl::HeatFlux)
+    Rns - Rnl   # (40)
+end
 
-function net_radiation(T::Type{Day}, cloud_cover, J::Day, Tmin::Temperature, Tmax::Temperature, RHmin::RH, RHmax::RH, loc::Location)
-  ra   = Ra(T, J, loc)
+"Net radiation per day [MJ/m^2/day]"
+function net_radiation(cloud_cover::Real, J::DoY, Tmin::Temp, Tmax::Temp, RHmin::Real, RHmax::Real, loc::Location)
+  ra   = Ra(J, loc)
   rs   = Rs(cloud_cover, J, ra, loc)
   rsso = Rsso(cloud_cover, J, ra, loc)
   ea   = Ea(Tmin, Tmax, RHmin, RHmax)
   rnl  = Rnl(rsso, Tmin, Tmax, ea)
   rns  = Rns(rs, loc)
   rn   = Rn(rns, rnl)
+  uconvert(u"MJ/m^2/d", rn)
 end
-function net_radiation(T::Type{Day}, cloud_cover, J::Day, Tmin::Temperature, Tmax::Temperature, RHmean::RH, loc::Location)
-  ra   = Ra(T, J, loc)
+"Net radiation per day [MJ/m^2/day]"
+function net_radiation(cloud_cover::Real, J::DoY, Tmin::Temp, Tmax::Temp, RHmean::Real, loc::Location)
+  ra   = Ra(J, loc)
   rs   = Rs(cloud_cover, J, ra, loc)
   rsso = Rsso(cloud_cover, J, ra, loc)
   ea   = Ea(Tmin, Tmax, RHmean)
   rnl  = Rnl(rsso, Tmin, Tmax, ea)
   rns  = Rns(rs, loc)
   rn   = Rn(rns, rnl)
+  uconvert(u"MJ/m^2/d", rn)
 end
 
-# Net radiation [MJ/(m^2*hour)]
-function net_radiation(T::Type{Hour}, cloud_cover, J::Day, Tmin, Tmax, RHmin::RH, RHmax::RH, hr1, hr2, loc::Location)
-  ra   = Ra(T, J, hr1, hr2, loc) # (28) [MJ/(m^2*hour)]
+"Net radiation [MJ/(m^2*hour)]"
+function net_radiation(cloud_cover::Real, J::DoY, Tmin::Temp, Tmax::Temp, RHmin::Real, RHmax::Real, hr1::ClockHrs, hr2::ClockHrs, loc::Location)
+  ra   = Ra(J, hr1, hr2, loc) # (28) [MJ/(m^2*hour)]
   rs   = Rs(cloud_cover, J, ra, loc)
   rsso = Rsso(cloud_cover, J, ra, loc)
   ea   = Ea(Tmin, Tmax, RHmin, RHmax)
   rnl  = Rnl(rsso, Tmin, Tmax, ea)
   rns  = Rns(rs, loc)
   rn   = Rn(rns, rnl)
+  uconvert(u"MJ/m^2/hr", rn)
 end
-function net_radiation(T::Type{Hour}, cloud_cover, J::Day, Tmin, Tmax, RHmean::RH, hr1, hr2, loc::Location)
-  ra   = Ra(T, J, hr1, hr2, loc) # (28) [MJ/(m^2*hour)]
+"Net radiation [MJ/(m^2*hour)]"
+function net_radiation(cloud_cover::Real, J::DoY, Tmin::Temp, Tmax::Temp, RHmean::Real, hr1::ClockHrs, hr2::ClockHrs, loc::Location)
+  ra   = Ra(J, hr1, hr2, loc) # (28) [MJ/(m^2*hour)]
   rs   = Rs(cloud_cover, J, ra, loc)
   rsso = Rsso(cloud_cover, J, ra, loc)
   ea   = Ea(Tmin, Tmax, RHmean)
   rnl  = Rnl(rsso, Tmin, Tmax, ea)
   rns  = Rns(rs, loc)
   rn   = Rn(rns, rnl)
+  uconvert(u"MJ/m^2/hr", rn)
 end
-
 
 # Soil heat flux (inaccurate method for over many days)
 # G  = soil heat flux [MJ/(m^2*day)],
@@ -498,13 +414,41 @@ end
 # Δt = length of time interval between T1 and T2 [day],
 # Δz = effective soil depth [m].
 # For a day Δz is between 0.1 and 0.2, 1 month is about 1, 4 months can be 2.0.
-x = [1, 30, 4*30]
-y = [0.1, 1, 2]
-const Δz_slope = (x\y)[1]  # line fit
-const Δz_b = y[1]
-Δz(::Type{Day}, days) = Δz_slope * days + Δz_b
-function soil_heat_flux{Temp<:Union(Celcius,Kelvin)}(T::Type{Day}, Δt, T1::Temp, T2::Temp, Δz=Δz(T,Δt), soil_heat_capacity=2.1)
-    0.408*soil_heat_capacity * (T2-T1) * Δz / Δt   # (41)
+#x = [1, 30, 4*30] * u"d"
+#y = [0.1, 1, 2] * u"m"
+"Soil heat flux [MJ/m^2/d]"
+function soil_heat_flux(Δt::Time, T1::Temp, T2::Temp)
+    if Δt <= 1u"d"
+        soil_heat_flux_hr(Δt, T1, T2)
+    elseif Δt <= 10u"d"
+        0.0u"MJ/m^2/d"
+    elseif Δt <= 30u"d" 
+        soil_heat_flux_days(Δt, T1, T2)
+    else
+        soil_heat_flux_months(Δt, T1, T2)
+    end
+end
+"Effective soil depth for heat flux [m]"
+function Δz(t::Time)
+    days = uconvert(u"d", t)
+    if days <= 1u"d"
+        return 0.1u"m"
+    elseif days <= 30u"d"
+        return (1u"m"-0.1u"m")/30u"d" * days + 0.1u"m"
+    elseif days <= 4*30u"d"
+        return (1u"m")/(3*30u"d") * days + 1u"m"
+    else
+        return 2.0u"m"
+    end
+end
+"Soil heat flux calculated over days [MJ/m^2/d]"
+function soil_heat_flux_days(Δt::Time, T1::Temp, T2::Temp, Δz=Δz(T,Δt))
+    soil_heat_capacity=2.1u"MJ/m^3/°C"  # depends on soil composition
+    t1 = uconvert(u"°C", T1)
+    t2 = uconvert(u"°C", T2)
+    Δt = uconvert(u"d",  Δt)
+    G = soil_heat_capacity * (t2-t1) * Δz(Δt) / Δt   # (41)
+    uconvert(u"MJ/m^2/d", G)
 end
 
 # For monthly periods
@@ -512,56 +456,63 @@ end
 # T2 = mean air temperature of current month
 # T3 = mean air temperature of next month
 # Δt = length of time interval between T1 and T2 [month],
-function soil_heat_flux(T::Type{Month}, Δt, T1::Celcius, T2::Celcius)  # (43) and (44)
-    warming = sign(value(T2-T1))
-    G = warming*0.14/Δt*(T2-T1)
+"Soil heat flux calculated over months [MJ/m^2/d]"
+function soil_heat_flux_months(Δt::Time, T1::Temp, T2::Temp)  # (43) and (44)
+    T1 = uconvert(u"°C", T1)
+    T2 = uconvert(u"°C", T2)
+    Δt = uconvert(u"d",  Δt)
+    warming = sign(T2-T1)
+    G = warming*0.14u"MJ/m^2/°C"/Δt*(T2-T1)
+    uconvert(u"MJ/m^2/d", G)
 end
 
 # For hourly or shorter periods
-function soil_heat_flux(T::Type{Hour}, hr1, hr2, Rn, latitude, J, Lz, Lm, T1, T2=T1+1)  # (45)
+function soil_heat_flux_hours(hr1::ClockHrs, hr2::ClockHrs, Rn::HeatFlux, J::DoY, loc::Location, T1::Temp, T2::Temp)  # (45)
     warming = sign(T2-T1)
-    hr = ave(T, hr1, hr2)
-    coef = ifelse(issunset(T, hr, latitude, J, Lz, Lm), 0.5, 0.1)
-    G = warming*coef*Rn
+    hr = ave_hrs(hr1, hr2)
+    coef = ifelse(issunset(hr, J, loc), 0.5, 0.1)
+    G = warming*coef*Rn                           # (45) (46)
+    uconvert(u"MJ/m^2/d", G)
 end
 
 # Windspeed height compensation (for weather stations)
 # u2 = wind speed at 2 m above ground surface [m/s],
 # uz = measured wind speed at z m above ground surface [m/s],
 # z  = height of measurement above ground surface [m].
-function u2(windspeed, z=10)
+function u2(windspeed::Speed, z::Elevation=10u"m")
     # speeds are in m/s or kmph
-    return windspeed*4.87/log(67.8z-5.42)
+    c1 = (67.8z-5.42u"m")/1u"m"
+    windspeed*4.87/log(c1)                    # (47)
 end
 
 # ETo = reference evapotranspiration [mm/day],
 # Δ   = slope vapour pressure curve [kPa/°C],
 # Rn  = net radiation at the crop surface [MJ/(m^2*day)],
 # G   = soil heat flux density [MJ/(m^2*day)],
-# γ   = psychrometric constant [kPa/°C].
+# γ′   = psychrometric constant [kPa/°C].
 # T   = mean daily air temperature at 2 m height [K],
 # u₂  = wind speed at 2 m height [m/s],
 # Es  = saturation vapour pressure [kPa],
 # Ea  = actual vapour pressure [kPa],
 # Esa = Es - Ea = saturation vapour pressure deficit [kPa],
-function ETo(Δ, Rn, G, γ, T::Kelvin, u₂, Esa)
-   (0.408*Δ*(Rn-G) + 900γ/value(T)*u₂*Esa)/(Δ+γ*(1+0.34u₂))  # (6)
+function ETo(Δ, Rn, G, γ′, T::typeof(K), u₂, Esa)
+   (0.408*Δ*(Rn-G) + 900γ/value(T)*u₂*Esa)/(Δ+γ′*(1+0.34u₂))  # (6)
 end
-function ETo(Td::Type{Day}, Δt, Tmin::Celcius, Tmax::Celcius, RHmin::RH, RHmax::RH, P_kPa::kPa, u10_kph, cloud_cover, J::Day, loc::Location)
+function ETo(Td::Type{Day}, Δt, Tmin::typeof(°C), Tmax::typeof(°C), RHmin, RHmax, P_kPa::typeof(kPa), u10_kph, cloud_cover, J::DoY, loc::Location)
     D = Δ(Tmin,Tmax)
     rn = net_radiation(Td, cloud_cover, J, Tmin, Tmax, RHmin, RHmax, loc)
     G = soil_heat_flux(Td, Δt, Tmin, Tmax)
-    g = γ(P_kPa)
+    g = γ′(P_kPa)
     T = Kelvin(ave(Tmin,Tmax))
     u₂ = u2(u10_kph/3.6, 10)
     esa = Esa(Tmin, Tmax, RHmin, RHmax)
     ETo(D, rn, G, g, T, u₂, esa)
 end
-function ETo(Td::Type{Day}, Δt, Tmin::Celcius, Tmax::Celcius, RHmean::RH, P_kPa::kPa, u10_kph, cloud_cover, J::Day, loc::Location)
+function ETo(Td::Type{Day}, Δt, Tmin::typeof(°C), Tmax::typeof(°C), RHmean, P_kPa::typeof(kPa), u10_kph, cloud_cover, J::DoY, loc::Location)
     D = Δ(Tmin,Tmax)
     rn = net_radiation(Td, cloud_cover, J, Tmin, Tmax, RHmean, loc)
     G = soil_heat_flux(Td, Δt, Tmin, Tmax)
-    g = γ(P_kPa)
+    g = γ′(P_kPa)
     T = Kelvin(ave(Tmin,Tmax))
     u₂ = u2(u10_kph/3.6, 10)
     esa = Esa(Tmin, Tmax, RHmean)
